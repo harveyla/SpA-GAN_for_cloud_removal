@@ -32,7 +32,7 @@ class _Discriminator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, in_ch, out_ch, gpu_ids):
+    def __init__(self, in_ch, out_ch, gpu_ids=None):
         super().__init__()
         self.gpu_ids = gpu_ids
 

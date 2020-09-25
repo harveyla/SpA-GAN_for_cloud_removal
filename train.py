@@ -14,6 +14,7 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 
 from data_manager import TrainDataset
+from dataset import SemanticFolder
 from models.gen.SPANet import Generator
 from models.dis.dis import Discriminator
 import utils
@@ -22,34 +23,45 @@ from eval import test
 from log_report import LogReport
 from log_report import TestReport
 
+def file_to_list(path):
+    file = open(path, mode='r')
+    lst = []
+    lst = file.readlines()
+    file.close()
+    lst = [file[:-1] for file in lst]
+    return lst
 
 def train(config):
-    gpu_manage(config)
-
     ### DATASET LOAD ###
     print('===> Loading datasets')
 
-    dataset = TrainDataset(config)
-    print('dataset:', len(dataset))
-    train_size = int((1 - config.validation_size) * len(dataset))
-    validation_size = len(dataset) - train_size
-    train_dataset, validation_dataset = torch.utils.data.random_split(dataset, [train_size, validation_size])
-    print('train dataset:', len(train_dataset))
-    print('validation dataset:', len(validation_dataset))
+    train_paths = file_to_list(f'{config.datasets_dir}{config.train_list}')
+    train_dataset = SemanticFolder(config.datasets_dir, train_paths)
+    print('dataset:', len(train_dataset))
+    test_paths = file_to_list(f'{config.datasets_dir}{config.test_list}')
+    test_dataset = SemanticFolder(config.datasets_dir, test_paths)
+    # train_size = int((1 - config.validation_size) * len(dataset))
+    # validation_size = len(dataset) - train_size
+    # train_dataset, validation_dataset = torch.utils.data.random_split(dataset, [train_size, validation_size])
+    # print('train dataset:', len(train_dataset))
+    # print('validation dataset:', len(validation_dataset))
     training_data_loader = DataLoader(dataset=train_dataset, num_workers=config.threads, batch_size=config.batchsize, shuffle=True)
-    validation_data_loader = DataLoader(dataset=validation_dataset, num_workers=config.threads, batch_size=config.validation_batchsize, shuffle=False)
+    testing_data_loader = DataLoader(dataset=train_dataset, num_workers=config.threads, batch_size=config.batchsize, shuffle=True)
+    # validation_data_loader = DataLoader(dataset=validation_dataset, num_workers=config.threads, batch_size=config.validation_batchsize, shuffle=False)
     
     ### MODELS LOAD ###
     print('===> Loading models')
 
-    gen = Generator(gpu_ids=config.gpu_ids)
+    if config.cuda: gen = Generator(gpu_ids=config.gpu_ids)
+    else: gen = Generator()
 
     if config.gen_init is not None:
         param = torch.load(config.gen_init)
         gen.load_state_dict(param)
         print('load {} as pretrained model'.format(config.gen_init))
 
-    dis = Discriminator(in_ch=config.in_ch, out_ch=config.out_ch, gpu_ids=config.gpu_ids)
+    if config.cuda: dis = Discriminator(in_ch=config.in_ch, out_ch=config.out_ch, gpu_ids=config.gpu_ids)
+    else: dis = Discriminator(in_ch=config.in_ch, out_ch=config.out_ch)
 
     if config.dis_init is not None:
         param = torch.load(config.dis_init)
@@ -91,9 +103,12 @@ def train(config):
         epoch_start_time = time.time()
         for iteration, batch in enumerate(training_data_loader, 1):
             real_a_cpu, real_b_cpu, M_cpu = batch[0], batch[1], batch[2]
-            real_a.data.resize_(real_a_cpu.size()).copy_(real_a_cpu)
-            real_b.data.resize_(real_b_cpu.size()).copy_(real_b_cpu)
-            M.data.resize_(M_cpu.size()).copy_(M_cpu)
+            # real_a.data.resize_(real_a_cpu.size()).copy_(real_a_cpu)
+            # real_b.data.resize_(real_b_cpu.size()).copy_(real_b_cpu)
+            # M.data.resize_(M_cpu.size()).copy_(M_cpu)
+            real_a.data.copy_(real_a_cpu)
+            real_b.data.copy_(real_b_cpu)
+            M.data.copy_(M_cpu)
             att, fake_b = gen.forward(real_a)
 
             ################
@@ -157,7 +172,7 @@ def train(config):
 
         print('epoch', epoch, 'finished, use time', time.time() - epoch_start_time)
         with torch.no_grad():
-            log_validation = test(config, validation_data_loader, gen, criterionMSE, epoch)
+            log_validation = test(config, testing_data_loader, gen, criterionMSE, epoch)
             validationreport(log_validation)
         print('validation finished')
         if epoch % config.snapshot_interval == 0:
@@ -180,6 +195,6 @@ if __name__ == '__main__':
     print('Job number: {:04d}'.format(n_job))
 
     # 保存本次训练时的配置
-    shutil.copyfile('config.yml', os.path.join(config.out_dir, 'config.yml'))
+    # shutil.copyfile('config.yml', os.path.join(config.out_dir, 'config.yml'))
 
     train(config)

@@ -22,6 +22,7 @@ from utils import gpu_manage, save_image, checkpoint
 from eval import test
 from log_report import LogReport
 from log_report import TestReport
+from loss import cloud_loss
 
 def file_to_list(path):
     file = open(path, mode='r')
@@ -72,13 +73,16 @@ def train(config):
     opt_gen = optim.Adam(gen.parameters(), lr=config.lr, betas=(config.beta1, 0.999), weight_decay=0.00001)
     opt_dis = optim.Adam(dis.parameters(), lr=config.lr, betas=(config.beta1, 0.999), weight_decay=0.00001)
 
-    real_a = torch.FloatTensor(config.batchsize, config.in_ch, config.width, config.height)
-    real_b = torch.FloatTensor(config.batchsize, config.out_ch, config.width, config.height)
+    real_cloud = torch.FloatTensor(config.batchsize, config.in_ch, config.width, config.height)
+    real_sar = torch.FloatTensor(config.batchsize, 2, config.width, config.height)
+    real_clean = torch.FloatTensor(config.batchsize, config.out_ch, config.width, config.height)
+    real_mask = torch.FloatTensor(config.batchsize, 1, config.width, config.height)
     M = torch.FloatTensor(config.batchsize, config.width, config.height)
 
     criterionL1 = nn.L1Loss()
     criterionMSE = nn.MSELoss()
     criterionSoftplus = nn.Softplus()
+    criterionCloud = cloud_loss()
 
     if config.cuda:
         gen = gen.cuda()
@@ -102,14 +106,16 @@ def train(config):
     for epoch in range(1, config.epoch + 1):
         epoch_start_time = time.time()
         for iteration, batch in enumerate(training_data_loader, 1):
-            real_a_cpu, real_b_cpu, M_cpu = batch[0], batch[1], batch[2]
-            # real_a.data.resize_(real_a_cpu.size()).copy_(real_a_cpu)
-            # real_b.data.resize_(real_b_cpu.size()).copy_(real_b_cpu)
+            (real_cloud_cpu, real_sar_cpu), (_, real_clean_cpu, real_mask_cpu), M_cpu = batch[0], batch[1], batch[2]
+            # real_a.data.resize_(real_a_cpu.size()).copy_(real_a_cpu) # a = cloud
+            # real_b.data.resize_(real_b_cpu.size()).copy_(real_b_cpu) # b = clean
             # M.data.resize_(M_cpu.size()).copy_(M_cpu)
-            real_a.data.copy_(real_a_cpu)
-            real_b.data.copy_(real_b_cpu)
+            real_cloud.data.copy_(real_cloud_cpu)
+            real_clean.data.copy_(real_clean_cpu)
+            real_sar.data.copy_(real_sar_cpu)
+            real_mask.data.copy_(real_mask_cpu)
             M.data.copy_(M_cpu)
-            att, fake_b = gen.forward(real_a)
+            att, fake_clean = gen.forward(real_cloud, real_sar)
 
             ################
             ### Update D ###
@@ -118,14 +124,14 @@ def train(config):
             opt_dis.zero_grad()
 
             # train with fake
-            fake_ab = torch.cat((real_a, fake_b), 1)
+            fake_ab = torch.cat((real_cloud, fake_clean), 1)
             pred_fake = dis.forward(fake_ab.detach())
             batchsize, _, w, h = pred_fake.size()
 
             loss_d_fake = torch.sum(criterionSoftplus(pred_fake)) / batchsize / w / h
 
             # train with real
-            real_ab = torch.cat((real_a, real_b), 1)
+            real_ab = torch.cat((real_cloud, real_clean), 1)
             pred_real = dis.forward(real_ab)
             loss_d_real = torch.sum(criterionSoftplus(-pred_real)) / batchsize / w / h
 
@@ -144,15 +150,18 @@ def train(config):
             opt_gen.zero_grad()
 
             # First, G(A) should fake the discriminator
-            fake_ab = torch.cat((real_a, fake_b), 1)
+            fake_ab = torch.cat((real_cloud, fake_clean), 1)
             pred_fake = dis.forward(fake_ab)
             loss_g_gan = torch.sum(criterionSoftplus(-pred_fake)) / batchsize / w / h
 
             # Second, G(A) = B
-            loss_g_l1 = criterionL1(fake_b, real_b) * config.lamb
+            loss_g_l1 = criterionL1(fake_clean, real_clean) * config.lamb
             loss_g_att = criterionMSE(att[:,0,:,:], M)
-            loss_g = loss_g_gan + loss_g_l1 + loss_g_att
+            
+            # cloud loss
+            loss_cloud = criterionCloud(fake_clean, (real_cloud, real_clean, real_mask))
 
+            loss_g = loss_g_gan + loss_g_l1 + loss_g_att + loss_cloud
             loss_g.backward()
 
             opt_gen.step()

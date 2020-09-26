@@ -126,7 +126,7 @@ class SPANet(nn.Module):
         super(SPANet,self).__init__()
 
         self.conv_in = nn.Sequential(
-            conv3x3(13,32),
+            conv3x3(15,32),
             nn.ReLU(True)
             )
         self.SAM1 = SAM(32,32,1)
@@ -150,9 +150,9 @@ class SPANet(nn.Module):
         self.conv_out = nn.Sequential(
             conv3x3(32,13)
         )
-    def forward(self, x):
-        # cloud, sar = inp
-        # x = torch.cat((cloud, sar), dim=1)
+    def forward(self, inp):
+        cloud, sar = inp
+        x = torch.cat((cloud, sar), dim=1)
 
         out = self.conv_in(x)
         out = F.relu(self.res_block1(out) + out)
@@ -183,6 +183,7 @@ class SPANet(nn.Module):
         out = F.relu(self.res_block17(out) + out)
        
         out = self.conv_out(out)
+        out[out<0] = 0
 
         return Attention4 , out
 

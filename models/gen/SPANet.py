@@ -181,6 +181,7 @@ class SPANet(nn.Module):
         out = F.relu(self.res_block17(out) + out)
        
         out = self.conv_out(out)
+        out[out<0] = 0
 
         return Attention4 , out
 

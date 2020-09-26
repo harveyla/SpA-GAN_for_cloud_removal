@@ -106,6 +106,7 @@ def train(config):
             # real_a.data.resize_(real_a_cpu.size()).copy_(real_a_cpu)
             # real_b.data.resize_(real_b_cpu.size()).copy_(real_b_cpu)
             # M.data.resize_(M_cpu.size()).copy_(M_cpu)
+            if real_a_cpu.size(0) != config.batchsize: continue
             real_a.data.copy_(real_a_cpu)
             real_b.data.copy_(real_b_cpu)
             M.data.copy_(M_cpu)
@@ -195,6 +196,6 @@ if __name__ == '__main__':
     print('Job number: {:04d}'.format(n_job))
 
     # 保存本次训练时的配置
-    # shutil.copyfile('config.yml', os.path.join(config.out_dir, 'config.yml'))
+    shutil.copyfile('config.yml', os.path.join(config.out_dir, 'config.yml'))
 
     train(config)

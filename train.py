@@ -110,6 +110,7 @@ def train(config):
             # real_a.data.resize_(real_a_cpu.size()).copy_(real_a_cpu) # a = cloud
             # real_b.data.resize_(real_b_cpu.size()).copy_(real_b_cpu) # b = clean
             # M.data.resize_(M_cpu.size()).copy_(M_cpu)
+            if real_a_cpu.size(0) != config.batchsize: continue
             real_cloud.data.copy_(real_cloud_cpu)
             real_clean.data.copy_(real_clean_cpu)
             real_sar.data.copy_(real_sar_cpu)

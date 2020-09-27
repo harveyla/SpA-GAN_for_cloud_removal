@@ -41,6 +41,7 @@ class Discriminator(nn.Module):
         self.dis.apply(weights_init)
 
     def forward(self, x):
+        return self.dis(x)
         if self.gpu_ids:
             return nn.parallel.data_parallel(self.dis, x, self.gpu_ids)
         else:

@@ -47,7 +47,7 @@ def train(config):
     # print('train dataset:', len(train_dataset))
     # print('validation dataset:', len(validation_dataset))
     training_data_loader = DataLoader(dataset=train_dataset, num_workers=config.threads, batch_size=config.batchsize, shuffle=True)
-    testing_data_loader = DataLoader(dataset=train_dataset, num_workers=config.threads, batch_size=config.batchsize, shuffle=True)
+    testing_data_loader = DataLoader(dataset=test_dataset, num_workers=config.threads, batch_size=config.batchsize, shuffle=True)
     # validation_data_loader = DataLoader(dataset=validation_dataset, num_workers=config.threads, batch_size=config.validation_batchsize, shuffle=False)
     
     ### MODELS LOAD ###
@@ -87,15 +87,23 @@ def train(config):
     if config.cuda:
         gen = gen.cuda()
         dis = dis.cuda()
+        if config.gpu_ids:
+            gen = torch.nn.DataParallel(gen, device_ids=config.gpu_ids)
+            dis = torch.nn.DataParallel(dis, device_ids=config.gpu_ids)
         criterionL1 = criterionL1.cuda()
         criterionMSE = criterionMSE.cuda()
         criterionSoftplus = criterionSoftplus.cuda()
-        real_a = real_a.cuda()
-        real_b = real_b.cuda()
+        real_cloud = real_cloud.cuda()
+        real_sar = real_sar.cuda()
+        real_clean = real_clean.cuda()
+        real_mask = real_mask.cuda()
         M = M.cuda()
 
-    real_a = Variable(real_a)
-    real_b = Variable(real_b)
+    real_cloud = Variable(real_cloud)
+    real_sar = Variable(real_sar)
+    real_clean = Variable(real_clean)
+    real_mask = Variable(real_mask)
+    M = Variabale(M)
 
     logreport = LogReport(log_dir=config.out_dir)
     validationreport = TestReport(log_dir=config.out_dir)
@@ -110,7 +118,7 @@ def train(config):
             # real_a.data.resize_(real_a_cpu.size()).copy_(real_a_cpu) # a = cloud
             # real_b.data.resize_(real_b_cpu.size()).copy_(real_b_cpu) # b = clean
             # M.data.resize_(M_cpu.size()).copy_(M_cpu)
-            if real_a_cpu.size(0) != config.batchsize: continue
+            if real_cloud_cpu.size(0) != config.batchsize: continue
             real_cloud.data.copy_(real_cloud_cpu)
             real_clean.data.copy_(real_clean_cpu)
             real_sar.data.copy_(real_sar_cpu)

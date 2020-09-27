@@ -197,6 +197,7 @@ class Generator(nn.Module):
         self.gen.apply(weights_init)
 
     def forward(self, x):
+        return self.gen(x)
         if self.gpu_ids:
             return nn.parallel.data_parallel(self.gen, x, self.gpu_ids)
         else:
